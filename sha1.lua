@@ -1,15 +1,17 @@
 sha1 = {
-    _VERSION = "sha.lua 3.2.+",
-    _URL = "https://github.com/kikito/sha.lua",
+    _VERSION = "sha.lua 3.2",
+    _URL = "https://github.com/alessandrohc/sha1.lua-fallback",
     _DESCRIPTION = [[
    SHA-1 secure hash computation, and HMAC-SHA1 signature computation in Lua (5.1)
    Based on code originally by Jeffrey Friedl (http://regex.info/blog/lua/sha1)
    And modified by Eike Decker - (http://cube3d.de/uploads/Main/sha1.txt)
+   Converted to lua 3.2 by Alex Silva - (https://github.com/alexsilva/sha1.lua-fallback)
+   And Optimized by Alessandro Hecht (https://github.com/alessandrohc/sha1.lua-fallback)
   ]],
     _LICENSE = [[
     MIT LICENSE
 
-    Copyright (c) 2013 Enrique GarcÃ­a Cota + Eike Decker + Jeffrey Friedl
+    Copyright (c) 2015 Enrique García Cota + Eike Decker + Jeffrey Friedl + Alex Silva + Alessandro Hecht
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the
@@ -32,27 +34,19 @@ sha1 = {
   ]]
 }
 
------------------------------------------------------------------------------------
+local SHA1_PATH = SHA1_PATH or ''
 
--- loading this file (takes a while but grants a boost of factor 13)
-local PRELOAD_CACHE = true
+-----------------------------------------------------------------------------------
 
 local BLOCK_SIZE = 64 -- 512 bits
 
 -- local storing of global functions (minor speedup)
-local rep = function(s, n)
-    local old_s = s
-    local i  = 1
-    while i < n do
-        s = s .. old_s
-        i = i + 1
-    end
-    return s
-end
+local floor,mod = floor,mod
+local char,format,rep = strchar,format,strrep
 
--- A funÃ§Ã£o math.mod foi renomeada para math.fmod
+-- A função math.mod foi renomeada para math.fmod
 local modf = function(a)
-    local r = mod(a, 1.0)
+    local r = %mod(a, 1.0)
     return (a - r), r
 end
 
@@ -63,7 +57,7 @@ end
 
 -- split a 32 bit word into four 8 bit numbers
 local w32_to_bytes = function(i)
-    return mod(floor(i / 16777216), 256), mod(floor(i / 65536), 256), mod(floor(i / 256), 256), mod(i, 256)
+    return %mod(%floor(i / 16777216), 256), %mod(%floor(i / 65536), 256), %mod(%floor(i / 256), 256), %mod(i, 256)
 end
 
 -- shift the bits of a 32 bit word. Don't use negative values for "bits"
@@ -76,15 +70,22 @@ end
 -- caching function for functions that accept 2 arguments, both of values between
 -- 0 and 255. The function to be cached is passed, all values are calculated
 -- during loading and a function is returned that returns the cached values (only)
-local cache2arg = function(fn)
-    if not %PRELOAD_CACHE then return fn end
-    local lut = {}
-    local index = 0
-    while index <= 65535 do
-        local a, b = floor(index / 256), mod(index, 256)
-        lut[index] = fn(a, b)
-        index = index + 1
+local cache_band = function(fn)
+	local lut = dofile(%SHA1_PATH .. "sha1_band.lua")
+    return function(a, b)
+        return %lut[a * 256 + b]
     end
+end
+
+local cache_bor = function(fn)
+	local lut = dofile(%SHA1_PATH .. "sha1_bor.lua")
+    return function(a, b)
+        return %lut[a * 256 + b]
+    end
+end
+
+local cache_bxor = function(fn)
+	local lut = dofile(%SHA1_PATH .. "sha1_bxor.lua")
     return function(a, b)
         return %lut[a * 256 + b]
     end
@@ -92,9 +93,10 @@ end
 
 -- splits an 8-bit number into 8 bits, returning all 8 bits as booleans
 local byte_to_bits = function(a)
-    local b = function(n)
-        local c = floor(%a / n)
-        return mod(c, 2) == 1
+    local floor,mod = %floor,%mod
+	local b = function(n)
+        local c = %floor(%a / n)
+        return %mod(c, 2) == 1
     end
     return b(1), b(2), b(4), b(8), b(16), b(32), b(64), b(128)
 end
@@ -108,21 +110,21 @@ local bits_to_byte = function(a, b, c, d, e, f, g, h)
 end
 
 -- bitwise "and" function for 2 8bit number
-local band = cache2arg(function(a, b)
+local band = cache_band(function(a, b)
     local A, B, C, D, E, F, G, H = %byte_to_bits(b)
     local a, b, c, d, e, f, g, h = %byte_to_bits(a)
     return %bits_to_byte(A and a, B and b, C and c, D and d, E and e, F and f, G and g, H and h)
 end)
 
 -- bitwise "or" function for 2 8bit numbers
-local bor = cache2arg(function(a, b)
+local bor = cache_bor(function(a, b)
     local A, B, C, D, E, F, G, H = %byte_to_bits(b)
     local a, b, c, d, e, f, g, h = %byte_to_bits(a)
     return %bits_to_byte(A or a, B or b, C or c, D or d, E or e, F or f, G or g, H or h)
 end)
 
 -- bitwise "xor" function for 2 8bit numbers
-local bxor = cache2arg(function(a, b)
+local bxor = cache_bxor(function(a, b)
     local A, B, C, D, E, F, G, H = %byte_to_bits(b)
     local a, b, c, d, e, f, g, h = %byte_to_bits(a)
     return %bits_to_byte(A ~= a, B ~= b, C ~= c, D ~= d, E ~= e, F ~= f, G ~= g, H ~= h)
@@ -130,7 +132,7 @@ end)
 
 -- bitwise complement for one 8bit number
 local bnot = function(x)
-    return 255 - mod(x, 256)
+    return 255 - %mod(x, 256)
 end
 
 -- creates a function to combine to 32bit numbers using an 8bit combination function
@@ -171,19 +173,19 @@ end
 
 -- binary complement for 32bit numbers
 local w32_not = function(a)
-    return 4294967295 - mod(a, 4294967296)
+    return 4294967295 - %mod(a, 4294967296)
 end
 
 -- adding 2 32bit numbers, cutting off the remainder on 33th bit
 local w32_add = function(a, b)
-    return mod((a + b), 4294967296)
+    return %mod((a + b), 4294967296)
 end
 
 -- adding n 32bit numbers, cutting off the remainder (again)
 local w32_add_n = function(a, ...)
     local index = 1
     while index <= getn(arg) do
-        a = mod((a + arg[index]), 4294967296)
+        a = %mod((a + arg[index]), 4294967296)
         index = index + 1
     end
     return a
@@ -191,7 +193,7 @@ end
 
 -- converting the number to a hexadecimal string
 local w32_to_hexstring = function(w)
-    return format("%08x", w)
+    return %format("%08x", w)
 end
 
 local hex_to_binary = function(hex)
@@ -221,7 +223,7 @@ function sha1.sha1(msg)
     local first_append = strchar(128)  -- append a '1' bit plus seven '0' bits
 
     local non_zero_message_bytes = strlen(msg) + 1 + 8 -- the +1 is the appended bit 1, the +8 are for the final appended length
-    local current_mod = mod(non_zero_message_bytes, 64)
+    local current_mod = %mod(non_zero_message_bytes, 64)
     local second_append = (current_mod > 0 and %rep(strchar(0), 64 - current_mod)) or ""
 
     -- now to append the length as a 64-bit number.
@@ -236,7 +238,7 @@ function sha1.sha1(msg)
 
     msg = msg .. first_append .. second_append .. L64
 
-    assert(mod(strlen(msg), 64) == 0)
+    assert(%mod(strlen(msg), 64) == 0)
 
     local chunks = strlen(msg) / 64
 

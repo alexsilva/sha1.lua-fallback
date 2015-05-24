@@ -34,7 +34,7 @@ sha1 = {
   ]]
 }
 
-local SHA1_PATH = SHA1_PATH or ''
+local SHA1_PATH = SHA1_PATH or '.'
 
 -----------------------------------------------------------------------------------
 
@@ -71,21 +71,21 @@ end
 -- 0 and 255. The function to be cached is passed, all values are calculated
 -- during loading and a function is returned that returns the cached values (only)
 local cache_band = function(fn)
-	local lut = dofile(%SHA1_PATH .. "sha1_band.lua")
+	local lut = dofile(%SHA1_PATH .. "/sha1_band.lua")
     return function(a, b)
         return %lut[a * 256 + b]
     end
 end
 
 local cache_bor = function(fn)
-	local lut = dofile(%SHA1_PATH .. "sha1_bor.lua")
+	local lut = dofile(%SHA1_PATH .. "/sha1_bor.lua")
     return function(a, b)
         return %lut[a * 256 + b]
     end
 end
 
 local cache_bxor = function(fn)
-	local lut = dofile(%SHA1_PATH .. "sha1_bxor.lua")
+	local lut = dofile(%SHA1_PATH .. "/sha1_bxor.lua")
     return function(a, b)
         return %lut[a * 256 + b]
     end
